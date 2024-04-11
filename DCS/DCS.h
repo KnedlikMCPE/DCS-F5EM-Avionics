@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <list>
 #include <typeinfo>
+#include <set>
 
 #include "DCS/Lua/lua.hpp"
 
@@ -13,7 +14,11 @@
 #pragma comment(lib, "DCS/libs/edCore.lib")
 
 class RandomObject;
+class MovingObject;
 
+namespace osg {
+	class Vec3f;
+}
 namespace Graphics {
 	class ModelParser;
 	class effectState;
@@ -27,6 +32,104 @@ namespace cockpit {
 	class clickableElementActionData;
 	class clickableElementData;
 	class UpdateHandler;
+	class SimpleOctTree;
+}
+
+
+class LinkBaseItem {
+public:
+	LinkBaseItem* prev;
+	LinkBaseItem* next;
+
+	LinkBaseItem() { next = prev = this; }
+	void Clear() { next = prev = this; }
+	LinkBaseItem& operator=(LinkBaseItem const&) { return *this; }
+
+	//size 0x10
+};
+
+class LinkHost {
+	friend class LinkBase;
+public:
+	void ResetLinks();
+protected:
+	LinkBaseItem baseItem;
+
+	//size 0x10
+};
+
+
+class LinkBase : public LinkBaseItem {
+	friend class LinkHost;
+public:
+	LinkBase(LinkBase const&);
+	LinkBase();
+	LinkBase& operator=(LinkBase const&);
+protected:
+	void Set(LinkHost*);
+public:
+	~LinkBase();
+	LinkHost* Get() const { return host; }
+protected:
+	LinkHost* host;
+
+	//size 0x18
+};
+
+template <class T = LinkHost> class Link : public LinkBase
+{
+public:
+	Link(void) {}
+	Link(const Link<T>& source) { Set(source); }
+	Link(T* h) { Set(h); }
+
+	operator T* (void) const { return static_cast<T*>(host); }
+	T* operator ->(void) const { return static_cast<T*>(host); }
+	Link& operator =(T* h) { Set(h); return *this; }
+
+	T& operator [](int i) const { return static_cast<T*>(host)[i]; }
+
+	//size 0x18
+};
+
+namespace Sound {
+	struct SND_SourceParams {
+		int fields;
+		double position[3];
+		double orientation[4];
+		float  gain;
+		float  pitch;
+		float  radius;
+		float  lowpass;
+	};
+
+	class Host {
+	public:
+		int id;
+	};
+
+	class Source {
+	public:
+		void create(Host&, char const*, struct SND_SourceParams const*);
+		void create_alternative(Host&, char const*, char const*, SND_SourceParams const*);
+		int create_alternative_ex(Host&, char const*, char const*, SND_SourceParams const*);
+		void destroy();
+		bool is_playing() const;
+		bool link(Source&);
+		void play(struct SND_PlayParams const*, SND_SourceParams const*);
+		bool play_continue();
+		void play_once(SND_SourceParams const*);
+		void play_update(SND_SourceParams const*);
+		void stop();
+		bool unlink();
+		void update(struct SND_SourceParams const*);
+
+	protected:
+		int source;
+		//size 0x08
+	};
+
+
 }
 
 namespace ed {
@@ -50,6 +153,8 @@ namespace ed {
 	template<typename Key, typename T, typename Hash = std::hash<Key>, typename Pred = std::equal_to<Key>, typename Alloc = allocator<std::pair<const Key, T> > > class unordered_map : public std::unordered_map<Key, T, Hash, Pred, Alloc> {};
 	template <typename T, std::size_t S> class array : public std::array<T, S> {};
 	template <typename T, typename A = allocator<T>> class list : public std::list<T, A> {};
+	template <typename T> class set : public std::set<T> {};
+	template<typename Key, typename T, typename Compare = std::less<Key>, typename Alloc = allocator<std::pair<const Key, T> > > class map : public std::map<Key, T, Compare, Alloc> {};
 
 
 }
@@ -494,5 +599,116 @@ namespace cockpit {
 
 		//size 0xc0
 	};
+
+	class avBasicElectric {
+	public:
+		virtual void setElecPower(bool);
+		virtual void switchElecOnOff();
+		virtual bool getElecPower() const;
+		avBasicElectric();
+		avBasicElectric(avBasicElectric&&);
+		avBasicElectric& operator=(avBasicElectric&&);
+	protected:
+		bool elecPower;
+		//size 0x10
+	};
+
+	class RWR_Emitter {
+
+	};
+
+	class avRWR : public avLuaDevice, public avBasicElectric {
+	public:
+		//ccContextRelatedObject
+		avRWR(void);
+		virtual ~avRWR();
+		virtual void initialize(unsigned char, ed::basic_string<char> const&, ed::basic_string<char> const&);
+		virtual void release(void);
+		virtual void update(void);
+	protected:
+		virtual void checkLaunchEvent(void);
+
+		void changeBrightness(void);
+		void ClearEmitters(void);
+		void dismissTgtSeparartion(void);
+		float getBrightness(void)const;
+		class ed::vector<RWR_Emitter> const& GetEmitters(void);
+		bool getLaunchEventIsActive(void)const;
+		MovingObject* getLaunchingSource(void)const;
+		bool getLockEventIsActive(void)const;
+		MovingObject* getLockingSource(void)const;
+		unsigned int getLockingType(void)const;
+		int GetMainEmitterPlace(void)const;
+		unsigned int GetNewestEmitter(void)const;
+		bool getPriorityMode(void)const;
+		void initialize_storage(void);
+		bool const isDegraded(void)const;
+		void search(int, int);
+		void setBrightness(float);
+		void setLaunchEventIsActive(bool);
+
+	protected:
+		float calc_priority(unsigned int, unsigned int, float)const;
+		void calculateGroups(void);
+		bool checkEmitter(unsigned int, unsigned int);
+		void checkEmittersSize(void);
+		void checkLockEvent(void);
+		int findNewPlace(void);
+		int findWithLowestPriority(float&);
+		bool getEmitterPos(MovingObject*, wPosition3<float>&, float&, float&, class osg::Vec3f&);
+		int getEmittersSize(void)const;
+		float getSignalStreigth(MovingObject*, wPosition3<float> const&, int, int, float)const;
+		bool isPositionEmpty(wPosition3<double> const&, int);
+		void ResizeStorage(int);
+		void selectMainEmitter(void);
+		void separateGroups(void);
+		void SetEmitterIsNotValid(int);
+		void SetEmitterIsValid(int);
+		void setEmitterTypes(MovingObject*, RWR_Emitter&);
+		void updateEmitters(void);
+
+	protected:
+		ed::vector<void*> sensor_vector;
+		ed::vector<RWR_Emitter*> rwr_emitters;
+		bool some_bool;
+		bool launchEventIsActive;
+		bool lockEventIsActive;
+		bool priorityMode;
+		bool update_separate_groups_related_1;
+		bool update_separate_groups_related_2;
+		SimpleOctTree* octree;
+
+		ed::set<int> groups[8];
+		char cross[16][16];
+		ed::set<int> search_set;
+
+		float brightness;
+		int emittersSize;
+		unsigned int newestEmitter;
+		RWR_Emitter* mainEmitter;
+		int mainEmitterPlace;
+		unsigned short MaxThreats;
+		double EmitterLiveTime;
+		Link<MovingObject> lauchingSource;
+		Link<MovingObject> lockingSource;
+		int lockingType;
+
+		Sound::SND_SourceParams SndParams;
+		void* some_data_1;
+		void* some_data_2;
+		void* some_data_3;
+
+		struct {
+			ed::map<unsigned int, Sound::Source*> search_new;
+			ed::map<unsigned int, Sound::Source*> lock_new;
+			Sound::Source  launch_warning;
+			Sound::Source  threat_new;
+		} sound;
+
+		double RWR_detection_coeff;
+
+		//size 0x3a0
+	};
+
 
 }
