@@ -17,6 +17,19 @@
 class RandomObject;
 class MovingObject;
 
+class wsType {
+public:
+	union {
+		struct {
+			unsigned char    l1;
+			unsigned char    l2;
+			unsigned char    l3;
+			unsigned char    l4;
+		};
+		long long type;
+	};
+};
+
 namespace osg {
 }
 
@@ -684,7 +697,37 @@ namespace cockpit {
 	};
 
 	class RWR_Emitter {
-
+	public: 
+		RWR_Emitter& operator=(RWR_Emitter&&);
+		RWR_Emitter& operator=(RWR_Emitter const&);
+		void reset(void);
+		RWR_Emitter(RWR_Emitter&&);
+		RWR_Emitter(RWR_Emitter const&);
+		RWR_Emitter(void);
+		~RWR_Emitter(void);
+		float Priority;
+		float SignalStreight;
+		osg::Vec3f Direction;
+		float Azimuth;
+		float Elevation;
+		double BirthTime;
+		double MissileTime;
+		unsigned int id;
+		Link<MovingObject> link;
+		int RadarType;
+		int RadarMode;
+		wsType EmitterType;
+		void* some_data;
+		ed::string EmitterTypeStr;
+		int SignalType;
+		int PlatformType;
+		bool NewEmitter;
+		bool Spike;
+		int WarningCounter;
+		bool DoNotControlEmissionTime;
+		bool IsActiveMissile;
+		bool IsValid;
+		bool isLocked;
 	};
 
 	class avRWR : public avLuaDevice, public avBasicElectric {
